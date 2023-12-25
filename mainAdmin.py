@@ -15,17 +15,17 @@ class AdminPanel(QWidget):
         self.setGeometry(100, 100, 800, 600)
 
         self.connection = mysql.connector.connect(
-            host="5.183.188.132",
-            user="db_stud_dan_usr2",
-            password="z0AtWDNnYSRROJWr",
-            database="db_stud_dann"
+            host="#############",
+            user="#########",
+            password="#############",
+            database="##########"
         )
         self.cursor = self.connection.cursor()
 
         self.table_selector_layout = QHBoxLayout()
-        self.zakaz_button = QPushButton('Zakaz')
-        self.voditel_button = QPushButton('Voditel')
-        self.klient_button = QPushButton('Klient')
+        self.zakaz_button = QPushButton('Заказ')
+        self.voditel_button = QPushButton('Водитель')
+        self.klient_button = QPushButton('Клиент')
         self.table_selector_layout.addWidget(self.zakaz_button)
         self.table_selector_layout.addWidget(self.voditel_button)
         self.table_selector_layout.addWidget(self.klient_button)
@@ -166,7 +166,6 @@ class AdminPanel(QWidget):
     def closeEvent(self, event):
         self.connection.close()
         event.accept()
-
 
 if __name__ == '__main__':
     app = QApplication(sys.argv)
