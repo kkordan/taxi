@@ -18,10 +18,10 @@ class DriverApp(App):
     def build(self):
         try:
             self.db = mysql.connector.connect(
-                host="5.183.188.132",
-                user="db_stud_dan_usr2",
-                password="z0AtWDNnYSRROJWr",
-                database="db_stud_dann"
+                host="#########",
+                user="########",
+                password="###########",
+                database="###########"
             )
         except mysql.connector.Error as err:
             self.show_popup('Предупреждение',
