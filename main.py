@@ -10,23 +10,32 @@ from kivy.metrics import dp
 from kivy.uix.scrollview import ScrollView
 import mysql.connector
 
-# Подключение к базе данных MySQL
-db = mysql.connector.connect(
-    host="5.183.188.132",
-    user="db_stud_dan_usr2",
-    password="z0AtWDNnYSRROJWr",
-    database="db_stud_dann"
-)
-
 class OrderApp(App):
+    def __init__(self, **kwargs):
+        super(OrderApp, self).__init__(**kwargs)
+        self.db = None
+
     def build(self):
-        self.client_id = None  # Идентификатор клиента, который вошел в систему
+        try:
+            self.db = mysql.connector.connect(
+                host="5.183.188.132",
+                user="db_stud_dan_usr2",
+                password="z0AtWDNnYSRROJWr",
+                database="db_stud_dann"
+            )
+        except mysql.connector.Error as err:
+            # Обработка ошибки подключения к базе данных
+            self.show_popup('Предупреждение',
+                            'Отсутствует подключение к интернету.')
+
+        self.client_id = None
+        self.driver_phone = None
 
         # Создание интерфейса для входа и регистрации
         self.login_layout = GridLayout(cols=1, spacing=10, padding=10)
         self.create_login_fields()
 
-        self.login_tab = TabbedPanelItem(text='Вход/Регистрация')
+        self.login_tab = TabbedPanelItem(text='Вход')
         self.login_tab.add_widget(self.login_layout)
 
         # Создание основного интерфейса с вкладками
@@ -54,6 +63,9 @@ class OrderApp(App):
         self.cost_label = Label(text='150 рублей')
         main_layout.add_widget(self.cost_label)
 
+        # Добавляем надпись о номере телефона службы поддержки
+        main_layout.add_widget(Label(text='Служба поддержки: 8-800-555-35-35', font_size=12))
+
         main_layout.add_widget(Button(text='Заказать', on_press=self.place_order))
         main_tab.add_widget(main_layout)
 
@@ -69,7 +81,6 @@ class OrderApp(App):
         tab_panel.add_widget(main_tab)
         tab_panel.add_widget(orders_tab)
 
-        # Обработчик изменения вкладки
         tab_panel.bind(current_tab=self.on_tab_switch)
 
         return tab_panel
@@ -80,7 +91,7 @@ class OrderApp(App):
             self.refresh_orders_list()
 
     def create_login_fields(self):
-        self.login_layout.clear_widgets()  # Очищаем виджеты
+        self.login_layout.clear_widgets()
 
         self.login_layout.add_widget(Label(text='Логин'))
         self.login_input = TextInput(multiline=False, background_color=(1, 1, 0, 1))
@@ -94,7 +105,7 @@ class OrderApp(App):
         self.login_layout.add_widget(Button(text='Зарегистрироваться', on_press=self.switch_to_register))
 
     def create_register_fields(self):
-        self.login_layout.clear_widgets()  # Очищаем виджеты
+        self.login_layout.clear_widgets()
 
         self.login_layout.add_widget(Label(text='Логин'))
         self.login_input = TextInput(multiline=False, background_color=(1, 1, 0, 1))
@@ -112,6 +123,9 @@ class OrderApp(App):
         self.phone_input = TextInput(multiline=False, background_color=(1, 1, 0, 1))
         self.login_layout.add_widget(self.phone_input)
 
+        consent_label = Label(text='Нажимая "Зарегистрироваться", \n вы даете согласие на обработку и хранение \n персональных данных.')
+        self.login_layout.add_widget(consent_label)
+
         self.login_layout.add_widget(Button(text='Зарегистрироваться', on_press=self.register))
         self.login_layout.add_widget(Button(text='Войти', on_press=self.switch_to_login))
 
@@ -122,6 +136,12 @@ class OrderApp(App):
         self.create_login_fields()
 
     def login(self, instance):
+
+        if not self.db:
+            self.show_popup('Предупреждение',
+                            'Отсутствует подключение к интернету.')
+            return
+
         login = self.login_input.text
         password = self.password_input.text
 
@@ -143,16 +163,22 @@ class OrderApp(App):
         self.switch_to_main_tab()
 
     def switch_to_main_tab(self):
-        self.root.switch_to(self.root.tab_list[1])  # Переключаемся на вкладку "Главное"
+        self.root.switch_to(self.root.tab_list[1])
 
     def switch_to_orders_tab(self):
         self.refresh_orders_list()
-        self.root.switch_to(self.root.tab_list[2])  # Переключаемся на вкладку "Заказы"
+        self.root.switch_to(self.root.tab_list[2])
 
     def refresh_orders_list(self):
+        if not self.db:
+            self.show_popup('Предупреждение',
+                            'Отсутствует подключение к интернету.')
+            return
+
         if self.client_id:
-            cursor = db.cursor()
-            query = "SELECT Nomer_zacaza, Mesto_otpravlenia, Mesto_naznacheniya, Stoimost FROM Zakaz WHERE ID_Klienta = %s"
+            cursor = self.db.cursor()
+            query = "SELECT Nomer_zacaza, Mesto_otpravlenia, Mesto_naznacheniya, Stoimost, ID_Voditelya " \
+                    "FROM Zakaz WHERE ID_Klienta = %s"
             values = (self.client_id,)
             try:
                 cursor.execute(query, values)
@@ -162,7 +188,6 @@ class OrderApp(App):
                 # Очищаем текущий список заказов
                 self.orders_layout.clear_widgets()
 
-                # Создаем ScrollView и GridLayout для списка заказов
                 scroll_view = ScrollView()
                 scroll_layout = GridLayout(cols=1, spacing=10, size_hint_y=None)
                 scroll_layout.bind(minimum_height=scroll_layout.setter('height'))
@@ -170,15 +195,22 @@ class OrderApp(App):
                 # Обновляем список заказов
                 for order in orders:
                     order_info = f"Заказ №{order[0]}\nМесто отправления: {order[1]}\nМесто назначения: {order[2]}\n" \
-                                 f"Стоимость: {order[3]} рублей\n{'-' * 30}"
-                    order_label = Label(text=order_info, size_hint_y=None, height=dp(80))
+                                 f"Стоимость: {order[3]} рублей\n"
+
+                    # Добавляем информацию о водителе, если заказ принят
+                    if order[4]:
+                        order_info += f"телефон водителя: {self.get_driver_phone(order[4])}\n"
+                        order_info += "Заказ принят\n"
+
+                    order_info += '-' * 30
+
+                    order_label = Label(text=order_info, size_hint_y=None, height=dp(110))
                     scroll_layout.add_widget(order_label)
 
                 # Добавляем GridLayout в ScrollView
                 scroll_view.add_widget(scroll_layout)
 
                 # Добавляем ScrollView в основной Layout
-                # self.orders_layout.add_widget(self.orders_label)
                 self.orders_layout.add_widget(scroll_view)
 
             except mysql.connector.Error as err:
@@ -186,7 +218,21 @@ class OrderApp(App):
             finally:
                 cursor.close()
 
+    def get_driver_phone(self, driver_id):
+        cursor = self.db.cursor()
+        query = "SELECT telefon FROM Voditel WHERE ID_voditelya = %s"
+        values = (driver_id,)
+        cursor.execute(query, values)
+        result = cursor.fetchone()
+        cursor.close()
+        return result[0] if result else "Номер не указан"
+
     def register(self, instance):
+        if not self.db:
+            self.show_popup('Предупреждение',
+                            'Отсутствует подключение к интернету.')
+            return
+
         login = self.login_input.text
         password = self.password_input.text
         repeat_password = self.repeat_password_input.text
@@ -211,7 +257,7 @@ class OrderApp(App):
         self.switch_to_main_tab()
 
     def authenticate_client(self, login, password):
-        cursor = db.cursor()
+        cursor = self.db.cursor()
         query = "SELECT ID_klienta FROM Klient WHERE login = %s AND parol = %s"
         values = (login, password)
         cursor.execute(query, values)
@@ -220,7 +266,7 @@ class OrderApp(App):
         return result[0] if result else None
 
     def check_existing_login(self, login):
-        cursor = db.cursor()
+        cursor = self.db.cursor()
         query = "SELECT ID_klienta FROM Klient WHERE login = %s"
         values = (login,)
         cursor.execute(query, values)
@@ -229,18 +275,17 @@ class OrderApp(App):
         return True if result else False
 
     def register_client(self, login, password, phone):
-        # Проверяем, существует ли уже запись с таким номером телефона
         if self.check_existing_phone(phone):
             self.show_popup('Ошибка', 'Пользователь с таким номером телефона уже существует.')
             return
 
-        cursor = db.cursor()
+        cursor = self.db.cursor()
         query = "INSERT INTO Klient (login, parol, telefon) VALUES (%s, %s, %s)"
         values = (login, password, phone)
 
         try:
             cursor.execute(query, values)
-            db.commit()
+            self.db.commit()
             self.show_popup('Успешно', 'Регистрация завершена. Теперь вы можете войти.')
         except mysql.connector.Error as err:
             self.show_popup('Ошибка', f'Ошибка при выполнении запроса: {err}')
@@ -248,7 +293,7 @@ class OrderApp(App):
             cursor.close()
 
     def check_existing_phone(self, phone):
-        cursor = db.cursor()
+        cursor = self.db.cursor()
         query = "SELECT ID_klienta FROM Klient WHERE telefon = %s"
         values = (phone,)
         cursor.execute(query, values)
@@ -257,6 +302,12 @@ class OrderApp(App):
         return True if result else False
 
     def place_order(self, instance):
+
+        if not self.db:
+            self.show_popup('Предупреждение',
+                            'Отсутствует подключение к интернету.')
+            return
+
         departure = self.departure_input.text
         destination = self.destination_input.text
         comment = self.comment_input.text
@@ -270,12 +321,12 @@ class OrderApp(App):
             return
 
         # Запись заказа в базу данных с использованием self.client_id
-        cursor = db.cursor()
+        cursor = self.db.cursor()
         query = "INSERT INTO Zakaz (ID_klienta, Mesto_otpravlenia, Mesto_naznacheniya, Kommentariy, Stoimost) " \
                 "VALUES (%s, %s, %s, %s, %s)"
         values = (self.client_id, departure, destination, comment, 150)
         cursor.execute(query, values)
-        db.commit()
+        self.db.commit()
         cursor.close()
 
         self.show_popup('Успешно', 'Заказ оформлен.')
